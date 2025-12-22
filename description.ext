@@ -1,0 +1,203 @@
+respawn = "BASE";
+respawnButton = 0;
+respawnDialog = 0;
+respawnOnStart = -1;
+respawndelay = 10;
+author = "J. Andrews"; 
+onLoadName = "Canis Picti Company PMC Zeus Template"; 
+onLoadMission = "CPC: PMC Zeus Template "; 
+briefing = 0;
+disabledAI = 1;
+enableDebugConsole[] = {"76561197999551832","76561198072691672"};  // Enables Debug Console for players with specified UIDs (Such as Admin, Leadership etc) and Host/Admin
+skipLobby = 0;
+allowFunctionsLog=1;
+allowFunctionsRecompile = 1;
+
+#include "HG\UI\HG_DialogsMaster.h"
+
+#define HALs_DEF_INIT
+	#include "HALs\Addons\main\config.hpp"
+#undef HALs_DEF_INIT
+
+class RscTitles
+{
+    #include "HG\UI\Dialogs\HG_HUD.h"
+    #include "HG\UI\Dialogs\HG_Tags.h"
+    #include "missionGenerator\images\pda.hpp"
+};
+
+
+class CfgClient
+{
+    #include "HG\Config\HG_Config.h"
+};
+
+class CfgSounds
+{
+    #include "HG\Sounds\HG_Sounds.h"
+    #include "lootsystem\cfg\sounds.h"
+    #include "missionGenerator\cfg\sounds.h"
+    #include "world\cfg\sounds.h"
+};
+
+#include "core\def\param.hpp"
+
+class CfgFunctions {
+	#include "modules\grad-persistence\cfgFunctions.hpp"
+    #include "lootsystem\cfg\functions.hpp"
+    #include "missionGenerator\cfg\functions.hpp"
+    #include "world\cfg\functions.hpp"
+    #include "general\cfg\functions.hpp"
+	#include "JeroenArsenal\functions.hpp"
+    #include "HG\Functions\HG_Functions.h"
+    #include "world\furniture\func.hpp"
+	#define HALs_DEF_FUNCTIONS
+		#include "HALs\Addons\main\config.hpp"
+	#undef HALs_DEF_FUNCTIONS
+};
+
+class Extended_Init_EventHandlers {
+
+    class CUP_O_RUS_M_Soldier_Survivor_VKPO_Summer {
+
+            init = "_this call (compile preprocessFileLineNumbers 'randomWeapons.sqf');";
+    };
+};
+
+class Extended_PreInit_EventHandlers {
+    class wreckSystem {
+        init = "call compileScript ['XEH_preInit.sqf']";
+    };
+    class tinter_furniture_pre_init {
+        init = "call compile preprocessFileLineNumbers 'world\furniture\XEH_preInit.sqf'";
+    };
+};
+
+class Extended_PostInit_EventHandlers {
+    class JA_LootGen {
+        serverInit  = "0 spawn {call compileFinal preprocessFileLineNumbers 'lootsystem\core\fn_lootMain.sqf'}";
+    };
+    class HALs_Stores {
+        init = "call compileScript ['XEH_postInit.sqf']";
+    };
+};
+
+class CfgUnitTemplates
+{
+	class gasMaskReplace
+	{
+		gasmaskList[]=
+		{"G_Balaclava_blk",
+		"G_Balaclava_lowprofile",
+		"G_Bandanna_aviator",
+		"G_Bandanna_shades"
+		};
+
+
+	};
+
+	class faceWearReplace
+	{
+		facewearList[]=
+		{"G_Balaclava_blk",
+		"G_Balaclava_lowprofile",
+		"G_Bandanna_aviator",
+		"G_Bandanna_shades"
+		};
+	};
+
+
+
+};
+
+class CfgGradPersistence {
+    missionTag = "PMC_Stubbhult";
+    loadOnMissionStart = 1;
+    missionWaitCondition = "true";
+    playerWaitCondition = "true";
+
+    saveUnits = 0;
+    saveVehicles = 1;
+    saveContainers = 1;
+    saveStatics = 1;
+    saveGradFortificationsStatics = 3;
+    saveMarkers = 0;
+    saveTasks = 0;
+    saveTriggers = 0;
+
+    savePlayerInventory = 1;
+    savePlayerDamage = 1;
+    savePlayerPosition = 1;
+    savePlayerMoney = 1;
+
+    saveTeamAccounts = 0;
+
+	/*
+    blacklist[] = {
+
+    };
+    
+*/
+    class customVariables {
+        class var1 {
+            varName = "HALs_money_funds";
+            varNamespace = "unit";
+            public = 1;
+        };
+        class var2 {
+            varName = "HG_BANK";
+            varNamespace = "unit";
+            public = 1;
+        };
+
+        class var3 {
+            varName = "acex_field_rations_hunger";
+            varNamespace = "player";
+            public = 1;
+        };
+
+        class var4 {
+            varName = "acex_field_rations_thirst";
+            varNamespace = "player";
+            public = 1;
+        };
+    };
+
+};
+
+class CfgTaskTypes 
+{
+    #include "missionGenerator\cfg\taskTypes.hpp"
+};
+
+class CfgTaskDescriptions
+{
+	#include "missionGenerator\cfg\taskDescriptions.hpp"
+};
+
+class CfgRanksCustom {
+
+    class RankRookie {
+        rankPriority = 0;
+        displayName = "Rookie";
+        displayNameShort = "Rookie";
+        rank = "Rookie";
+        texture = "\A3\Ui_f\data\GUI\Cfg\Ranks\private_gs.paa";
+    };
+
+};
+
+// Vehicle Purchase
+class Vehicles {
+	class car1 {
+		type = "C_Hatchback_01_sport_F";
+		fuel = 80;
+		repair = 2000;
+	};
+	class car2 {
+		type = "rhsusf_m1025_w_mk19";
+		fuel = 80;
+		repair = 3000;
+	};
+};
+

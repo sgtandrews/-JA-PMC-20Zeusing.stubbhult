@@ -1,0 +1,11 @@
+_simpleObj = this;
+_position = getPosWorld _simpleObj;
+_objPos = getPos _simpleObj;
+_objDir = getDir _simpleObj; 
+_vectorDirUp = [vectorDir _simpleObj, vectorUp _simpleObj]; 
+_model = getModelInfo _simpleObj select 1; 
+deleteVehicle _simpleObj; 
+_obj = createSimpleObject [_model, _position]; 
+_obj setVectorDirAndUp _vectorDirUp; 
+_obj setDir _objDir; 
+_obj setVectorUp surfaceNormal _objPos;

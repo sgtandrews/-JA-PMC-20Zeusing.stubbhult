@@ -1,0 +1,667 @@
+/*
+Author: Sarogahtyp
+
+Description:
+Spawns weapons, items and bags in buildings near to alive players inside a trigger.
+Deletes stuff if players are not close enough anymore.
+The script doesnt care about any trigger preferences except the trigger area.
+Main while loop runs every 8-12 seconds.
+Soft delayed item spawning to prevent performance impact.
+
+How to adjust/use the script: 
+_trigger_array   -> contains the names of triggers in which area loot should spawn.
+
+_spawn_chance  ->  The chance to spawn loot on a specific house position. If the same house is the closest building to 
+
+_item_chance -> chance to spawn an item instead of a weapon
+
+_bagChance -> chance to spawn a bag instead of a item
+
+_max_magazines -> the maximum of magazines spawned in an itembox. 
+
+_house_distance -> houses inside of this radius of a player will spawn loot
+
+_exclude_loot -> you can add classnames there and those stuff will never spawn
+
+_civExclusiveLoot -> add classnames here and nothing else will be spawned
+
+_debug -> if true then u get hints about places were stuff was spawned or deleted and how many spawn places are active
+*/
+
+//***** EDIT BELOW TO ADJUST BEHAVIOR
+_trigger_array          = [lootTrigger_1, "marker1", lootTrigger_2, lootTrigger_3,lootTrigger_4];  //names of triggers or area markers in editor. if empty then spawning occures everywhere
+_spawn_chance           = 100;    //chance to spawn loot at specific house position
+_launcher_chance        = 0;  //chance to spawn a launcher as weapon instead of rifle, pistol or machine gun
+_item_chance            = 80;   //chance to spawn an item instead of a weapon
+_case_chance            = 20; //chance to spawn a case with items instead of a weapon [[[NEW ADDITION ]]
+_bagChance             = 0; // chance to spawn a backpack instead of an item
+_min_medical_loot       = 15; //minimum amount of medical supplies in a crate  
+
+
+_blood_chance           = 50; //Chance to spawn blood
+_advanced_med_chance    = 10; //Chance to spawn advance Medical
+_max_magazines          = ([1,3] call BIS_fnc_randomInt);  //maximum number of mags to spawn on the ground
+_min_magazines_box      = 3; //minimum amount of mags a box can contain
+_min_magazines_case     = 5; //minimum amount of mags a case can contain
+_min_food_case          = 3; //minimum amount of items spawning in food bags
+_min_junk_case          = 5; //Minimum amount of items spawning in junk boxes
+//_max_magazines_box    = _min_magazines_box + random(7); //maximum number of mags to spawn in a case
+_max_magazines_launcher = 2; //maximum number of ammo to spawn for rocket launchers
+_max_magazines_gl       = selectRandom [1,2,3]; //maximum number of ammo to spawn for grenade launchers
+_house_distance         = 50;  // houses with that distance to players will spawn loot
+_exclude_loot           = [];   //classnames of items which should never spawn
+
+//***** LOOT TABLES 
+//Seperate Firearm arrays to make it easier to organise 
+_civPistolsArray          = ["CUP_hgun_Colt1911","rhs_weap_tt33","rhs_weap_makarov_pm","rhs_weap_pb_6p9","rhs_weap_savz61_folded","rhs_weap_6p53","rhs_weap_cz99","hgun_P07_blk_F","rhsusf_weap_m9"];
+_civPistolMagsArray      = ["rhsusf_mag_7x45acp_MHP","cup_8rnd_762x25_tt","rhs_mag_9x18_8_57n181s","rhsgref_20rnd_765x17_vz61","rhs_18rnd_9x21mm_7bt3","rhssaf_mag_15rnd_9x19_fmj","16rnd_9x21_green_mag","rhsusf_mag_15rnd_9x19_fmj"];
+_civSMGsArray             = ["UK3CB_MP5A2","rhs_weap_scorpion","uk3cb_ppsh41","rhs_weap_m3a1"];
+_civSMGMagsArray         = ["uk3cb_mp5_30rnd_9x19_magazine","uk3cb_mp5_30rnd_9x19_magazine_g","uk3cb_ppsh_71rnd_magazine","rhsgref_30rnd_1143x23_m1t_smg"];
+_civAssaultRiflesArray    = ["rhs_weap_aks74u","rhs_weap_MP44"];
+_civAssaultRifleMagsArray= ["rhs_30rnd_545x39_7n6m_ak","rhs_30rnd_545x39_ak_green","rhsgref_30rnd_792x33_sme_stg"];
+_civShotgunsArray         = ["CUP_sgun_slamfire","sgun_HunterShotgun_01_sawedoff_F","sgun_HunterShotgun_01_F"];
+_civShotgunMagsArray     = ["cup_1rnd_12gauge_pellets_no00_buck","cup_1rnd_12gauge_slug","cup_2rnd_12gauge_pellets_no00_buck","cup_2rnd_12gauge_pellets_no4_bird","cup_2rnd_12gauge_slug"];
+_civRiflesArray           = ["UK3CB_CZ550","rhs_weap_m38","uk3cb_sks_01","CUP_srifle_Mosin_Nagant"];
+_civRifleMagArray        = ["uk3cb_cz550_5rnd_mag","uk3cb_cz550_5rnd_mag_g","rhsgref_5rnd_762x54_m38","rhsgref_10rnd_792x57_m76"];
+//Need to code in to convert strs in array to lowercase
+_civMagsCombinedArray    = _civPistolMagsArray + _civSMGMagsArray + _civAssaultRifleMagsArray + _civShotgunMagsArray + _civRifleMagArray;
+//Medical Loot table
+_medical_loot_general   = ["ACE_elasticBandage","ACE_elasticBandage","ACE_morphine","ACE_tourniquet","ACE_splint","ACE_epinephrine","ACE_adenosine"];
+_medical_loot_blood     = ["ACE_bloodIV_250","ACE_bloodIV_500","ACE_bloodIV"];
+_medical_loot_advanced  = ["FSGm_ItemMedicBag","ACE_personalAidKit"];
+_food_loot              = ["ACE_MRE_BeefStew","ACE_MRE_ChickenTikkaMasala","ACE_MRE_ChickenHerbDumplings","ACE_MRE_CreamChickenSoup","ACE_MRE_CreamTomatoSoup","ACE_MRE_LambCurry","ACE_MRE_MeatballsPasta","ACE_MRE_SteakVegetables","ACE_Banana","ACE_Can_Franta","ACE_Can_RedGull","ACE_Can_Spirit","ACE_Canteen","ACE_Canteen_Empty","ACE_Canteen_Half","ACE_Canteen_Nearly_Empty","ACE_Canteen_Nearly_Full","ACE_WaterBottle","ACE_WaterBottle_Empty","ACE_WaterBottle_Half","ACE_WaterBottle_Nearly_Empty","ACE_Humanitarian_Ration"];
+_civFirearmLoot           = _civPistolsArray + _civRiflesArray + _civSMGsArray + _civAssaultRiflesArray + _civShotgunsArray;
+_uniform_loot           = ["SCE_Loner_1","SCE_Loner_2","SCE_Loner_3","SCE_Loner_4","SE_Leather_Jacket_Loner_Green","SE_Leather_Jacket_Loner_Tan","SE_Scavenger_Coat","SE_Assault_Fatigues_Loner"];
+_civHeadgearLoot          = ["rhs_beanie_green","UK3CB_H_Beanie_02_BLK","SP_BaseballCap_Black","H_Cap_tan","CUP_H_PMC_Cap_Back_Tan","UK3CB_ARD_B_H_Crew_Cap","H_ShemagOpen_tan","UK3CB_H_Shemag_blk","rhs_tsh4","SP_TSH04Helmet_Black","SE_Ushanka","UK3CB_H_Ushanka_Cap_01","rhs_ushanka","CUP_H_C_Ushanka_03","CUP_H_C_Ushanka_02","CUP_H_C_Ushanka_04","rhsgref_M56","rhs_ssh60","rhs_ssh68_2","H_Tank_eaf_F","rhssaf_helmet_m59_85_nocamo","CUP_H_SLA_Helmet_OD_worn","CUP_H_SLA_TankerHelmet"];
+_civFacewearLoot          = ["SE_GP21","SE_GP5","SE_GP7","SE_M17","SE_PBF","SE_PPM88","SE_S10","SE_Respirator_Goggles","SCE_G_M334","SCE_G_M40_1","SCE_G_CN2F","G_Balaclava_blk","G_Balaclava_lowprofile","G_Bandanna_aviator","G_Bandanna_shades"];
+_item_loot              = ["rhssaf_zrak_rd7j","SAN_Headlamp_v1","JSHK_contam_detector","ACRE_BF888S","ACE_EntrenchingTool","ACE_elasticBandage","ACE_morphine","ACE_tourniquet","ACE_splint","ACE_epinephrine","ACE_adenosine","ACE_MapTools","AnomalyDetector"];
+_attachment_loot        = ["rhs_acc_pbs4","cup_optic_pem","rhs_acc_6p9_suppressor","muzzle_snds_acp"];
+_civVestLoot              = ["rhsgref_alice_webbing","Assault_vest","CUP_V_B_BAF_MTP_Osprey_Mk4_Webbing","SP_Bandolier1_Green","Bearing","BlackRock_vest","CUP_V_CDF_CrewBelt","V_Chestrig_khk","SCE_Coat_Long_3","SCE_Coat_Short_3","SCE_Coat_Sleeveless_3","V_SmershVest_01_F","CUP_V_RUS_Smersh_New_Full","UK3CB_TKA_I_V_6Sh92_vog_Khk","UK3CB_TKA_I_V_vydra_3m_Tan","UK3CB_ADA_B_V_TacVest_KHK","SE_Loner_Belt"];
+_civBagLoot               = ["B_Respawn_Sleeping_bag_blue_F","B_Respawn_Sleeping_bag_brown_F","B_Respawn_TentDome_F","B_Respawn_Sleeping_bag_F","B_Respawn_TentA_F","Max_Fuchs","B_LegStrapBag_coyote_F","VKBO","Transformer","rhs_medic_bag","DuffleBag","LK3F","UK3CB_CW_SOV_O_EARLY_B_Sidor_RIF","B_Messenger_Coyote_F","CUP_B_AssaultPack_Coyote"];
+_civExclusiveLoot         = _civFirearmLoot + _item_loot + _attachment_loot + _food_loot + _uniform_loot + _civHeadgearLoot + _civFacewearLoot + _civPistolMagsArray + _civSMGMagsArray + _civAssaultRifleMagsArray + _civShotgunMagsArray + _civRifleMagArray; //add classnames here and nothing else will be spawned
+_smokegren_loot         = ["rhs_mag_rdg2_white"]; //Smoke Grenades
+_hiexplogren_loot       = ["CUP_HandGrenade_RGO"]; //Offensive Grenades
+_chemlightgren_loot     = ["Chemlight_blue","Chemlight_green","ACE_Chemlight_HiBlue","ACE_Chemlight_HiGreen","ACE_Chemlight_HiRed","ACE_Chemlight_HiWhite","ACE_Chemlight_HiYellow","ACE_Chemlight_Orange","Chemlight_red","ACE_Chemlight_UltraHiOrange","ACE_Chemlight_White","Chemlight_yellow"]; //Chemlight Grenades
+_grenade_loot           = _smokegren_loot + _hiexplogren_loot + _chemlightgren_loot;
+_debug                  = false;  //information about number of places where items were spawned or deleted
+
+
+//Turn ararys into lowercase
+_civMagsCombinedArray_Temp = [];
+
+{
+  // code...
+  _civMagsCombinedArray_Temp pushBack (toLower _x);
+} forEach _civMagsCombinedArray;
+
+_civMagsCombinedArray = _civMagsCombinedArray_Temp;
+
+
+
+
+
+//***** EDIT ABOVE TO ADJUST BEHAVIOR
+
+//***** init variables
+_checked_positions      = [];
+_spawned_positions      = [];
+_civWeaponsMagsArray     = [];
+_civPistolsMagsLootArray     = [];
+_civRiflesMagsLootArray      = [];
+_launchers_mags_array   = [];
+/*
+_Muzzles_array          = [];
+_Cows_array             = [];
+_PointerSlot_array      = [];
+_UnderBarrelSlot_array  = [];
+*/
+_attachment_list        = [];
+_items_array            = [];
+_bags_array             = [];
+_box_classname          = "WeaponHolderSimulated_Scripted";
+_case_classnames        = ["CaseAmmo","CaseGrenade","Casefood","CaseJunk","CaseMag","CaseMeds","CaseMoney","CasePistol","CaseTrack","CaseWeapon"];
+//_case_classnames        = ["CaseTrack"];
+//_unused_cases           = ["CaseThiccWeapon","CaseThiccItems"];
+
+//debug: Getting Load/Ballastic/Explosive for Vests/Bags  
+
+
+
+//***** get weapon and magazine classnames from config file
+if (_spawn_chance > 0) then {
+    _cfgWeapons = ("true" configClasses (configFile >> "cfgWeapons")) select {
+        _parents = [_x,true] call BIS_fnc_returnParents; 
+        ("Rifle" in _parents) or ("MGun" in _parents) or ("Pistol" in _parents)
+    }; 
+
+    {
+        //Weapon name
+        _weaponString = configName (_x);
+        _muzzle_class = (getArray (configFile >> "CfgWeapons" >> _weaponString >> "muzzles")) select 1;
+        _muzzle_magazines = [];
+
+        //Gets weapon mags
+        if !(isNil {_muzzle_class}) then {	
+            _muzzle_magazines = getArray (configFile >> "CfgWeapons" >> _weaponString >> _muzzle_class >> "magazines")
+        };
+
+
+        if (!(_weaponString in _exclude_loot) and ((count _civExclusiveLoot == 0) or (_weaponString in _civExclusiveLoot))) then {
+            //debug [ Intersecting wasn't working due to arrayIntersect can't compare lower n upper cases ]
+            /*private _weapon_mags_log = (getArray (configFile >> "CfgWeapons" >> _weaponString >> "magazines"));
+            private _weapon_mags_fnclog = [_weaponString] call BIS_fnc_compatibleMagazines;
+            private _test_intersect = _weapon_mags_log arrayIntersect _civMagsCombinedArray;
+            private _test_fnc_intersect = _weapon_mags_fnclog arrayIntersect _civMagsCombinedArray;
+            diag_log "";
+            diag_log "Weapon Selected";
+            diag_log _weaponString;
+            diag_log "Weapon Mags in Config";
+            diag_log _weapon_mags_log;
+            diag_log "Function Call";
+            diag_log _weapon_mags_fnclog;
+            diag_log "_civMagsCombinedArray";
+            diag_log _civMagsCombinedArray;
+            diag_log "Intersect _civMagsCombinedArray with pulling from config file";
+            diag_log _test_intersect;
+            diag_log "Intersect _civMagsCombinedArray with compat fnc";
+            diag_log _test_fnc_intersect;
+            */
+            _compat_mags = [_weaponString] call BIS_fnc_compatibleMagazines;
+            _muzzle_magazines2 = _civMagsCombinedArray arrayIntersect _compat_mags;
+            //diag_log "_muzzle_magazines2";
+            //diag_log _muzzle_magazines2;
+            _d = _civWeaponsMagsArray pushBack [_weaponString, _muzzle_magazines2, _muzzle_magazines];
+        };
+    } count _cfgWeapons;
+
+//***** same as above but for pistols only
+    _cfgWeapons = ("true" configClasses (configFile >> "cfgWeapons")) select {
+        _parents = [_x,true] call BIS_fnc_returnParents; 
+        ("Pistol" in _parents)
+    }; 
+
+    {
+        _PistolString = configName (_x);
+        _pistol_muzzle_class = (getArray (configFile >> "CfgWeapons" >> _PistolString >> "muzzles")) select 1;
+        _pistol_muzzle_magazines = [];
+
+        if !(isNil {_pistol_muzzle_class}) then {	
+            _pistol_muzzle_magazines = getArray (configFile >> "CfgWeapons" >> _PistolString >> _pistol_muzzle_class >> "magazines")
+        };
+
+
+        if (!(_PistolString in _exclude_loot) and ((count _civExclusiveLoot == 0) or (_PistolString in _civExclusiveLoot))) then {
+            _pistol_compat_mags = [_PistolString] call BIS_fnc_compatibleMagazines;
+            _pistol_muzzle_magazines2 = _civMagsCombinedArray arrayIntersect _pistol_compat_mags;
+            _d = _civPistolsMagsLootArray pushBack [_PistolString, _pistol_muzzle_magazines2, _pistol_muzzle_magazines];
+        };
+    } count _cfgWeapons;
+
+//*****Same as above but for everything but Pistols
+    _cfgWeapons = ("true" configClasses (configFile >> "cfgWeapons")) select {
+        _parents = [_x,true] call BIS_fnc_returnParents; 
+        ("Rifle" in _parents) or ("MGun" in _parents)
+        }; 
+
+        {
+        _RifleString = configName (_x);
+        _Rifle_muzzle_class = (getArray (configFile >> "CfgWeapons" >> _RifleString >> "muzzles")) select 1;
+        _Rifle_muzzle_magazines = [];
+
+        if !(isNil {_Rifle_muzzle_class}) then {	
+            _Rifle_muzzle_magazines = getArray (configFile >> "CfgWeapons" >> _RifleString >> _Rifle_muzzle_class >> "magazines")
+        };
+
+        _Rifle_muzzle_magazines = _Rifle_muzzle_magazines arrayIntersect _civMagsCombinedArray;
+
+        if (!(_RifleString in _exclude_loot) and ((count _civExclusiveLoot == 0) or (_RifleString in _civExclusiveLoot))) then {
+            _rifle_compat_mags = [_RifleString] call BIS_fnc_compatibleMagazines;
+            _rifle_muzzle_magazines2 = _civMagsCombinedArray arrayIntersect _rifle_compat_mags;
+            _d = _civRiflesMagsLootArray pushBack [_RifleString, _rifle_muzzle_magazines2, _Rifle_muzzle_magazines];
+        };
+    } count _cfgWeapons;
+
+
+//***** get launchers and rocket/grenade classnames from config file
+    if (_launcher_chance > 0) then {
+        _cfgLaunchers = ("true" configClasses (configFile >> "cfgWeapons")) select {
+            _parents = [_x,true] call BIS_fnc_returnParents; 
+            ("Launcher" in _parents)
+        }; 
+
+        {
+            _launcherString = configName (_x);
+            if (!(_launcherString in _exclude_loot) and ((count _civExclusiveLoot == 0) or (_launcherString in _civExclusiveLoot))) then {
+                _d = _launchers_mags_array pushBack [_launcherString, (getArray (configFile >> "CfgWeapons" >> _launcherString >> "magazines"))];
+            };
+        } count _cfgLaunchers;
+    };
+
+
+//*****get items classnames from config file
+    if (_item_chance > 0) then {
+        _cfgItems = ("true" configClasses (configFile >> "cfgWeapons")) select {
+            _parents = [_x,true] call BIS_fnc_returnParents; 
+            ("ItemCore" in _parents)
+        };
+
+        {
+            _itemString = configName (_x);
+            if (!(_itemString in _exclude_loot) and ((count _civExclusiveLoot == 0) or (_itemString in _civExclusiveLoot))) then {
+                _d = _items_array pushBack _itemString;
+            };
+        } count _cfgItems;
+    };
+
+//*****get bag classnames from config file
+    if (_bagChance > 0) then {
+        _cfgBags = ("true" configClasses (configFile >> "cfgVehicles")) select {
+            _parents = [_x,true] call BIS_fnc_returnParents; 
+            ("Bag_Base" in _parents)
+        }; 
+
+        {
+            _bagString = configName (_x);
+            if (!(_bagString in _exclude_loot) and ((count _civExclusiveLoot == 0) or (_bagString in _civExclusiveLoot))) then {
+                _d = _bags_array pushBack _bagString;
+            };
+        } count _cfgBags;
+    };
+
+//*****get random case from array
+    if (_case_chance > 0) then {
+        _selectedCase = (selectRandom _case_classnames);
+    };
+
+
+    while {true} do {
+        _actual_positions = [];
+        _new_positions = [];
+        _loot_players = [];
+        _justPlayers = (allPlayers - entities "HeadlessClient_F") select {alive _x};
+
+//***** get desired spawn positions for loot in the buildings close to players
+        //***** which are inside of a loot trigger area
+        if(count _trigger_array > 0) then {
+            {
+                {
+                    _loot_players pushBack _x;
+                    true
+                } count (_justPlayers inAreaArray _x);
+                true
+            } count _trigger_array;
+        }
+        else {
+            _loot_players = _justPlayers;
+        };
+
+        {
+            {
+                {
+                    if (!(_x in _checked_positions) && (random 100 < _spawn_chance)) then {
+                        _new_positions pushBackUnique _x;
+                        _spawned_positions pushBackUnique _x;
+                    };
+
+                    _checked_positions pushBackUnique _x;
+                    _actual_positions pushBackUnique _x;
+                    true
+                } count (_x buildingPos -1); 
+                true
+            } count (nearestObjects [_x, ["house"], _house_distance]);
+            true
+        } count _loot_players;
+
+//***** delete loot out of range
+        _checked_positions = _checked_positions select {_x in _actual_positions};
+        _delete_positions = _spawned_positions select {!(_x in _actual_positions)};
+        _spawned_positions = _spawned_positions - _delete_positions;
+
+        _del_pos_num = count _delete_positions;
+       //Need to make loop for _case_classnames to delete
+        {
+            {
+                deleteVehicle _x;
+                true
+            } count (nearestObjects [_x, [_box_classname], 3]);
+            true
+        } count _delete_positions;
+        {
+            {
+                deleteVehicle _x;
+                true
+            } count (nearestObjects [_x, ["CaseAmmo"], 3]);
+            true
+        } count _delete_positions;
+        {
+            {
+                deleteVehicle _x;
+                true
+            } count (nearestObjects [_x, ["CaseGrenade"], 3]);
+            true
+        } count _delete_positions;
+        {
+            {
+                deleteVehicle _x;
+                true
+            } count (nearestObjects [_x, ["Casefood"], 3]);
+            true
+        } count _delete_positions;   
+        {
+            {
+                deleteVehicle _x;
+                true
+            } count (nearestObjects [_x, ["CaseJunk"], 3]);
+            true
+        } count _delete_positions;
+        {
+            {
+                deleteVehicle _x;
+                true
+            } count (nearestObjects [_x, ["CaseMag"], 3]);
+            true
+        } count _delete_positions;
+        {
+            {
+                deleteVehicle _x;
+                true
+            } count (nearestObjects [_x, ["CaseMeds"], 3]);
+            true
+        } count _delete_positions; 
+                {
+            {
+                deleteVehicle _x;
+                true
+            } count (nearestObjects [_x, ["CaseMoney"], 3]);
+            true
+        } count _delete_positions;
+        {
+            {
+                deleteVehicle _x;
+                true
+            } count (nearestObjects [_x, ["CasePistol"], 3]);
+            true
+        } count _delete_positions;
+        {
+            {
+                deleteVehicle _x;
+                true
+            } count (nearestObjects [_x, ["CaseThiccWeapon"], 3]);
+            true
+        } count _delete_positions;   
+        {
+            {
+                deleteVehicle _x;
+                true
+            } count (nearestObjects [_x, ["CaseTrack"], 3]);
+            true
+        } count _delete_positions;
+        {
+            {
+                deleteVehicle _x;
+                true
+            } count (nearestObjects [_x, ["CaseWeapon"], 3]);
+            true
+        } count _delete_positions;
+        {
+            {
+                deleteVehicle _x;
+                true
+            } count (nearestObjects [_x, ["CaseThiccItems"], 3]);
+            true
+        } count _delete_positions;     
+
+//***** spawn loot within 4 seconds (delay to prevent performance impact)
+        _new_pos_num = count _new_positions;
+
+// debug things
+        if(_debug) then {
+            _spawned_num = count _spawned_positions;
+            _checked_num = count _checked_positions;
+
+            hint parseText format ["spawned new: %1, deleted old: %2 <br /> 
+                                    spawned places: %3, overall places: %4",  
+                                    _new_pos_num, _del_pos_num, _spawned_num, _checked_num];
+        };
+
+        if (_new_pos_num > 0) then {
+            _sleep_delay = 4 / _new_pos_num;
+//Checks to see if _casechance overwrites _itembox, otherwise continue.
+            {
+                if (random 100> _case_chance) then {
+                    _selectedCase = (selectRandom _case_classnames);
+                    _casebox = createVehicle [_selectedCase, (_x vectorAdd [0, 0, 0.5]), [], 0.2, "CAN_COLLIDE"];
+
+//Checks what box and then adds loot
+    //CaseAmmo
+                     if (_selectedCase == "CaseAmmo") then {
+                           _weapon_mag = selectRandom _civWeaponsMagsArray;
+                           _casebox addItemCargoGlobal [(selectRandom (_weapon_mag select 1)), 1];
+
+                            private _max_magazines_box =  _min_magazines_box + random(3);
+                           for "_i" from 1 to ([_min_magazines_box,_max_magazines_box] call BIS_fnc_randomInt) do 
+                            {
+                                _casebox addItemCargoGlobal [(selectRandom (_weapon_mag select 1)), 1];
+                            };
+                            
+                            if (count (_weapon_mag select 2) > 0) then
+                            {
+                                for "_i" from 1 to (ceil random _max_magazines_gl) do {
+                                    _casebox addItemCargoGlobal [(selectRandom (_weapon_mag select 2)), 1];
+                                };
+                            };
+                           
+                        };
+    //CaseMag
+                     if (_selectedCase == "CaseMag") then {
+                           _weapon_mag = selectRandom _civWeaponsMagsArray;
+                           _casebox addItemCargoGlobal [(selectRandom (_weapon_mag select 1)), 1];
+
+                           private _max_magazines_case = _min_magazines_case + (random(5));
+                           for "_i" from 1 to ([_min_magazines_case,_max_magazines_case] call BIS_fnc_randomInt) do 
+                            {
+                                _casebox addItemCargoGlobal [(selectRandom (_weapon_mag select 1)), 1];
+                            };
+                            
+                            if (count (_weapon_mag select 2) > 0) then
+                            {
+                                for "_i" from 1 to (ceil random _max_magazines_gl) do {
+                                    _casebox addItemCargoGlobal [(selectRandom (_weapon_mag select 2)), 1];
+                                };
+                            };
+                           
+                        };
+    //CaseWeapon
+                     if (_selectedCase == "CaseWeapon") then {
+                           _rifle_mag = selectRandom _civRiflesMagsLootArray;
+                           _casebox addItemCargoGlobal [(_rifle_mag select 0), 1];
+
+                           private _max_magazines_case = _min_magazines_case + (random(5));
+                           for "_i" from 1 to ([_min_magazines_case,_max_magazines_case] call BIS_fnc_randomInt) do
+                            {
+                                _casebox addItemCargoGlobal [(selectRandom (_rifle_mag select 1)), 1];
+                            };
+                            
+                            if (count (_rifle_mag select 2) > 0) then
+                            {
+                                for "_i" from 1 to (ceil random _max_magazines_gl) do {
+                                    _casebox addItemCargoGlobal [(selectRandom (_rifle_mag select 2)), 1];
+                                };
+                            };
+                           
+                        };
+    //CaseMeds
+                     if (_selectedCase == "CaseMeds") then {
+
+
+                                //Enables ACE Medical Facility
+                                ["CaseMeds", "InitPost", {
+                                    params ["_vehicle"];
+                                    _vehicle setVariable ["ace_medical_isMedicalFacility", true];
+                                    }, nil, nil, true] call CBA_fnc_addClassEventHandler;
+
+                                if (random 100< _advanced_med_chance) then {
+                                    _casebox addItemCargoGlobal [(selectRandom _medical_loot_advanced),1];
+                                };
+                                //hint format ["Medical loot chance",_max_medical_loot];
+                                private _max_medical_loot = _min_medical_loot + (random(25));
+                           for "_i" from 1 to ([_min_medical_loot,_max_medical_loot] call BIS_fnc_randomInt) do 
+                            {
+                                _casebox addItemCargoGlobal [(selectRandom _medical_loot_general),1];
+                                _casebox addItemCargoGlobal ["ACE_elasticBandage",1];
+
+                                if (random 100< _blood_chance) then {
+                                    _casebox addItemCargoGlobal [(selectRandom _medical_loot_blood), 1];
+                                }; 
+                           };                          
+                        };
+    //CasePistol
+                    if (_selectedCase == "CasePistol") then {
+                           _pistol_mag = selectRandom _civPistolsMagsLootArray;
+                           _casebox addItemCargoGlobal [(_pistol_mag select 0), 1];
+
+                           private _max_magazines_case = _min_magazines_case + (random(5));
+                           for "_i" from 1 to ([_min_magazines_case,_max_magazines_case] call BIS_fnc_randomInt) do
+                            {
+                                _casebox addItemCargoGlobal [(selectRandom (_pistol_mag select 1)), 1];
+                            };
+                            
+                            if (count (_pistol_mag select 2) > 0) then
+                            {
+                                for "_i" from 1 to (ceil random _max_magazines_gl) do {
+                                    _casebox addItemCargoGlobal [(selectRandom (_pistol_mag select 2)), 1];
+                                };
+                            };
+                           
+                        };
+    //CaseGrenade
+                    if (_selectedCase == "CaseGrenade") then {
+
+                           private _max_magazines_case = _min_magazines_case + (random(5));
+                           for "_i" from 1 to ([_min_magazines_case,_max_magazines_case] call BIS_fnc_randomInt) do
+                            {
+                                _casebox addItemCargoGlobal [(selectRandom _grenade_loot ), 1];
+                            };                      
+                        };
+    //CaseFood
+                    if (_selectedCase == "Casefood") then {
+
+                           private _max_food_case = _min_food_case + (random(6));
+                           for "_i" from 1 to ([_min_food_case,_max_food_case] call BIS_fnc_randomInt) do
+                            {
+                                _casebox addItemCargoGlobal [(selectRandom _food_loot ), 1];
+                            };                      
+                        };
+    //CaseJunk
+                    if (_selectedCase == "CaseJunk") then {
+                        
+                            //Need to make Junk item
+                           private _max_junk_case = _min_junk_case + (random(5));
+                           private _bagsAndvests_combined = _civVestLoot + _civBagLoot;
+                           private _junk_loot = _item_loot + _attachment_loot + _food_loot + _uniform_loot + _civHeadgearLoot + _civFacewearLoot;;
+                           private _general_loot_chance = 75;
+                           private _medical_loot_chance = 85;
+                           private _grenade_loot_chance = 95;
+                           private _loadequip_loot_chance = 98;
+                           for "_i" from 1 to ([_min_junk_case,_max_junk_case] call BIS_fnc_randomInt) do
+                            {
+                                if (random 100 > _general_loot_chance) then {
+                                    _casebox addItemCargoGlobal [(selectRandom _civExclusiveLoot ), 1];
+                                }; 
+                                if (random 100 > _medical_loot_chance) then {
+                                    _casebox addItemCargoGlobal [(selectRandom _medical_loot_general ), 1];
+                                };
+                                if (random 100 > _grenade_loot_chance) then {
+                                    _casebox addItemCargoGlobal [(selectRandom _grenade_loot ), 1];
+                                }; 
+                                 if (random 100 > _loadequip_loot_chance) then {
+                                    _casebox addItemCargoGlobal [(selectRandom _bagsAndvests_combined ), 1];
+                                }
+                                else{ 
+                                    _casebox addItemCargoGlobal ["ACE_CableTie", 1]; 
+                                };                                                                   
+                            };                      
+                        };
+    //CaseTrack
+                    if (_selectedCase == "CaseTrack") then {
+                        
+                            private _max_junk_case = _min_junk_case + (random(6));
+                           for "_i" from 1 to ([_min_junk_case,_max_junk_case] call BIS_fnc_randomInt) do
+                            {
+                                _compatibleItems = [];
+                                _weapon_select = selectRandom _civFirearmLoot;
+                                //diag_log _weapon_select;
+                                //_weaponSlots = configFile >> "CfgWeapons" >> _weapon_select >> "WeaponSlotsInfo";
+
+                                //{_compatibleItems append (getArray (_weaponSlots >> _x >> "compatibleItems"))} forEach ["CowsSlot", "MuzzleSlot", "PointerSlot", "UnderBarrelSlot"];
+                                _compatibleItems = [_weapon_select] call BIS_fnc_compatibleItems;
+                                diag_log _compatibleItems;
+                                //_casebox addItemCargoGlobal ["ACE_CableTie", 1];
+                                _casebox addItemCargoGlobal [(selectRandom _compatibleItems), 1]; 
+                                if (count _compatibleItems <= 0) then {
+                                     _weapon_mag = selectRandom _civWeaponsMagsArray;
+                                     _casebox addItemCargoGlobal [(selectRandom (_weapon_mag select 1)), 1];                                
+                                    }                              
+                            };                      
+                        };
+//Floor Item Spawning
+                }
+                else {
+                    _itembox = createVehicle [_box_classname, (_x vectorAdd [0, 0, 0.5]), [], 0.2, "NONE"];
+
+                    if (random 100 > _item_chance) then {
+                        if (random 100 > _launcher_chance) then
+                        {
+                            _weapon_mag = selectRandom _civWeaponsMagsArray;
+                            _itembox addItemCargoGlobal [(_weapon_mag select 0), 1];
+
+                            for "_i" from 1 to (ceil random _max_magazines) do 
+                            {
+                                _itembox addItemCargoGlobal [(selectRandom (_weapon_mag select 1)), 1];
+                            };
+                            
+                            if (count (_weapon_mag select 2) > 0) then
+                            {
+                                for "_i" from 1 to (ceil random _max_magazines_gl) do {
+                                    _itembox addItemCargoGlobal [(selectRandom (_weapon_mag select 2)), 1];
+                                };
+                            };
+                        }
+                        else {
+                            _launcher_mag = selectRandom _launchers_mags_array;
+                            _itembox addItemCargoGlobal [(_launcher_mag select 0), 1];
+
+                            for "_i" from 1 to (ceil random _max_magazines_launcher) do {
+                                _itembox addItemCargoGlobal [(selectRandom (_launcher_mag select 1)), 1];
+                            };
+                        };
+                    }
+                    else {
+                        if (random 100 > _bagChance) then {
+                            _item = selectRandom _items_array;
+                            _itembox addItemCargoGlobal [_item, 1];
+                        }
+                        else {
+                            _bag = selectRandom _bags_array;
+                            _itembox addBackpackCargoGlobal [_bag, 1];
+                        };
+                    };
+                    /*
+                    {
+                        if (random 100> _case_chance) then {
+                            _casebox = createVehicle [_selectedCase, (_x vectorAdd [0, 0, 0.5]), [], 0.2, "NONE"];
+                            _item = selectRandom _items_array;
+                            _casebox addItemCargoGlobal [_item, 1];
+                        }
+                        else {
+
+                        };
+                    };
+                    */
+                    sleep _sleep_delay;
+                };
+            } count _new_positions;
+        };
+        sleep (1 + random 2);
+    };
+};
